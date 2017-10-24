@@ -1,0 +1,86 @@
+---
+title: "ML Project"
+author: "Hector Munoz"
+date: "24 de octubre de 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data import and preparation
+In the following section the data was prepared for the machine learning process. The 20 observations for the final quizz evaluation were stored in a dataframe labeled "final_test", while the rest of  the data was stored in the variable "training". Finally, columns where all entries were missing values (NA) were removed from the "trainig" DF. 
+```{r import}
+# Data import and setup ---------------------------------------------------
+suppressPackageStartupMessages(suppressWarnings(library(caret))) 
+suppressPackageStartupMessages(suppressWarnings(library(data.table))) 
+suppressPackageStartupMessages(suppressWarnings(library(dtplyr))) 
+suppressPackageStartupMessages(suppressWarnings(library(dplyr))) 
+suppressPackageStartupMessages(suppressWarnings(library(tidyr))) 
+
+#Download of training file
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml_training")
+    training <- read.csv("pml_training",na.strings = c("","NA","#DIV/0!"))
+#Download of testing file
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml_test")
+    final_test <- read.csv("pml_test",na.strings = c("","NA","#DIV/0!"))
+    #NOTE: 
+
+# Data cleaning -----------------------------------------------------------
+#Remove unnecessary columns
+    # Convert to data.table
+    training <- training %>% tbl_dt()
+    training_raw <- copy(training)
+    training <- copy(training_raw)
+    final_test <- final_test %>% tbl_dt()
+    
+    # Inspect missing values
+    sapply(training, function(x) mean(!is.na(x))) %>% sort()
+    
+    #Remove counter and "all-zero" column
+    training <- training %>% 
+        dplyr::select(-X, -kurtosis_yaw_belt, -cvtd_timestamp,
+                      -skewness_yaw_belt, -kurtosis_yaw_dumbbell,
+                        -skewness_yaw_dumbbell, -kurtosis_yaw_forearm, -skewness_yaw_forearm)
+    
+
+```
+
+## Data partition
+A test set with 20% of the observations (disting from the 20-observation "final_test" dataframe) was built by taking 3923 rows at random out of the training set. The new "training" variable now contains therefore, 3923 less observations. 
+```{r}
+# Subdivide training set ------------------------------------------------
+    # Create data partition in order to estimate out-of-sample error
+    index <- createDataPartition(training$classe, p = 0.8, list = F)
+    test <- training[-index]
+    training <- training[index]
+```
+
+## Model building and assessment
+The training set was preprocessed through the removal of the zero-variance ("zv") and nea-zero-variance ("nzv") columns. After that, the median value for each column was imputed in rows where values were missing ("medianImpute""). Finally, the principal components were obtained from the dataset ("pca").  
+
+The ML model was built using a *randomforest* *(I found out that a relatively new package called "ranger" applies the *randomforest* method in a quicker and more efficient way, this is why the method in *train* is "ranger" and not "rf")*. The cross-validation method selected was a 3-fold CV, as indicated in train_control. 
+```{r model, cache=TRUE}
+# Model -------------------------------------------------------------------
+    # PreProcess the data
+    preProcess_model <- preProcess(x = training, 
+                                   method = c("zv","nzv","medianImpute", "pca"))
+    prep_training <- predict(preProcess_model, training)    
+    
+    # Apply Cross-Validation
+    train_control <- trainControl(method = "cv", number = 3)
+#Initial basic model
+    model <- train(classe~.,data = prep_training,method="ranger", 
+                   trainControl = train_control)
+    
+# Model assessment
+(train_asessment <- confusionMatrix(training$classe, predict(model, prep_training)))
+
+prep_test <- predict(preProcess_model, test)
+(test_asessment <- confusionMatrix(test$classe, predict(model, prep_test)))
+```
+
+
+
+In order to be able to estimate the out-of-sample error, a 
