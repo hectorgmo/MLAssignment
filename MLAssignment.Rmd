@@ -44,7 +44,7 @@ suppressPackageStartupMessages(suppressWarnings(library(tidyr)))
     final_test <- final_test %>% tbl_dt()
     
     # Inspect missing values
-    sapply(training, function(x) mean(!is.na(x))) %>% sort()
+    #sapply(training, function(x) mean(!is.na(x))) %>% sort()
     
     #Remove counter and "all-zero" column
     training <- training %>% 
